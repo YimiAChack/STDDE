@@ -3,6 +3,7 @@ Official implementation for "Unveiling Delay Effects in Traffic Forecasting: A P
 https://dl.acm.org/doi/abs/10.1145/3589334.3645688
 
 
+```
 @inproceedings{stdde,
   title={Unveiling Delay Effects in Traffic Forecasting: A Perspective from Spatial-Temporal Delay Differential Equations},
   author={Long, Qingqing and Fang, Zheng and Fang, Chen and Chen, Chong and Wang, Pengfei and Zhou, Yuanchun},
@@ -10,3 +11,4 @@ https://dl.acm.org/doi/abs/10.1145/3589334.3645688
   pages={1035--1044},
   year={2024}
 }
+```
