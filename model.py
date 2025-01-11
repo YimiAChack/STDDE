@@ -87,8 +87,8 @@ class STDDE(nn.Module):
         semantic_A = self.semantic_weight(torch.mm(node_embeddings, node_embeddings.T))
 
         spatial_A = get_normalized_adj_tensor(spatial_A)
-        # A = semantic_A + spatial_A
-        A = spatial_A
+        A = semantic_A + spatial_A
+        # A = spatial_A
         A_tensor, delay = check_delay(A, all_delay, back=self.back, threshold=self.thres)
         st, ed = torch.nonzero(A_tensor).T 
         graph = dgl.graph((st, ed))
@@ -112,8 +112,8 @@ class STDDE(nn.Module):
     def forward(self, A, all_delay, coeffs):
         # coeffs: List of 4 elements, element shape is batch * node * (seq-1) * in_dim
         device = coeffs[0].device
-        # g = self.get_graph(A, all_delay, device)
-        g = self.graph
+        g = self.get_graph(A, all_delay, device)
+        # g = self.graph
 
         # times = torch.linspace(0, 11, 12).to(device)
         times = torch.arange(12).to(device) + self.back
@@ -123,6 +123,7 @@ class STDDE(nn.Module):
 
         # generate history hidden state from input, the time horizon of history state is set as 1
         hist_hidden = self.input_to_hidden(initial_state)
+        # print(hist_hidden.shape, initial_state.shape)
         # fill in future hidden state with zero
         fur_length = int(self.out_dim / self.step_size)
         fur_hidden = torch.zeros(num_node, fur_length, batch_size, self.hidden_dim, device=device)
@@ -130,33 +131,36 @@ class STDDE(nn.Module):
 
         g.ndata['state'] = hidden_state
         y_hidden = self.dde(g, y0=hist_hidden[:, int(self.back/self.step_size) - 1, :, :], funcx=spline.derivative, t=times)
+        
+        # print(y_hidden.shape, hidden_state.shape)
 
         # autoregressive
         regression_loss = 0
-        for i in range(12):
+        for i in range(self.out_dim):
             regression = self.regress(y_hidden[i]).squeeze(-1)
             target = spline.evaluate(times[i])[:, :, 0].T
             regression_loss += F.smooth_l1_loss(regression, target)
 
         # prediction
-        ## dde multi step prediction
-        fur_length = int((self.out_dim + self.back) / self.step_size)
-        hidden = torch.zeros(num_node, fur_length, batch_size, self.hidden_dim, device=device)
-        hidden[:, :self.back, :, :] = y_hidden[-self.back:].transpose(0, 1)
-        g.ndata['state'] = hidden
+        # ## dde multi step prediction
+        # fur_length = int((self.out_dim + self.back) / self.step_size)
+        # hidden = torch.zeros(num_node, fur_length, batch_size, self.hidden_dim, device=device)
+        # hidden[:, :self.back, :, :] = y_hidden[-self.back:].transpose(0, 1)
+        # g.ndata['state'] = hidden
 
-        coeffs = torch.stack(coeffs, dim=-1)
-        fake_control = self.get_control(coeffs.reshape(batch_size, num_node, -1))
-        fake_control = fake_control.reshape(batch_size, num_node, self.out_dim - 1, self.in_dim, 4)
-        fake_control = tuple(fake_control[:, :, :, :, i] for i in range(4))
-        spline = NaturalCubicSpline(times, fake_control)
+        # coeffs = torch.stack(coeffs, dim=-1)
+        # fake_control = self.get_control(coeffs.reshape(batch_size, num_node, -1))
+        # fake_control = fake_control.reshape(batch_size, num_node, self.out_dim - 1, self.in_dim, 4)
+        # fake_control = tuple(fake_control[:, :, :, :, i] for i in range(4))
+        # spline = NaturalCubicSpline(times, fake_control)
 
-        # y_hidden = self.dde2(g, y0=hidden[:, 0, :, :], funcx=None, t=times+1)
-        y_hidden = self.dde2(g, y0=hidden[:, int(self.back/self.step_size) - 1, :, :], funcx=spline.derivative, t=times)
-        y_pred = self.pred(y_hidden).squeeze(-1).permute(2, 1, 0)
+        # # y_hidden = self.dde2(g, y0=hidden[:, 0, :, :], funcx=None, t=times+1)
+        # y_hidden = self.dde2(g, y0=hidden[:, int(self.back/self.step_size) - 1, :, :], funcx=spline.derivative, t=times+1)
+        
+        # y_pred = self.pred(y_hidden).squeeze(-1).permute(2, 1, 0)
 
-        # ## one step prediction 
-        # y_pred = self.pred_one_step(y_hidden[-1]).permute(1, 0, 2)
+        ## one step prediction 
+        y_pred = self.pred_one_step(y_hidden[-1]).permute(1, 0, 2)
 
         if self.training:
             return y_pred, regression_loss/12
